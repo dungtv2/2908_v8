@@ -6,13 +6,12 @@
     'description': """
 
     """,
-    'author': "Strong Apps",
-    'website': 'http://www.hanelsoft.vn/',
+    'author': "Apps for Odoo",
     'depends': ['web'],
     'data': ['templates.xml',
              'security/show_fields_security.xml',
              'security/ir.model.access.csv'],
-    'price': 139.00,
+    'price': 250.00,
     'currency': 'EUR',
     'installable': True,
     'auto_install': False,

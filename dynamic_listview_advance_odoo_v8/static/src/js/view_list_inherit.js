@@ -117,222 +117,97 @@ view_list_inherit = function(instance) {
     });
 
    instance.web.ListView.include({
-        load_list: function(data) {
-            var self = this;
-            this.fields_view = data;
-            this.name = "" + this.fields_view.arch.attrs.string;
-
-            if (this.fields_view.arch.attrs.colors) {
-                this.colors = _(this.fields_view.arch.attrs.colors.split(';')).chain()
-                    .compact()
-                    .map(function(color_pair) {
-                        var pair = color_pair.split(':'),
-                            color = pair[0],
-                            expr = pair[1];
-                        return [color, py.parse(py.tokenize(expr)), expr];
-                    }).value();
-            }
-
-            if (this.fields_view.arch.attrs.fonts) {
-                this.fonts = _(this.fields_view.arch.attrs.fonts.split(';')).chain().compact()
-                    .map(function(font_pair) {
-                        var pair = font_pair.split(':'),
-                            font = pair[0],
-                            expr = pair[1];
-                        return [font, py.parse(py.tokenize(expr)), expr];
-                    }).value();
-            }
-
-            this.setup_columns(this.fields_view.fields, this.grouped);
-
-            this.$el.html(QWeb.render(this._template, this));
-            this.$el.addClass(this.fields_view.arch.attrs['class']);
-
-            // Head hook
-            // Selecting records
-            this.$el.find('.oe_list_record_selector').click(function(){
-                self.$el.find('.oe_list_record_selector input').prop('checked',
-                    self.$el.find('.oe_list_record_selector').prop('checked')  || false);
-                var selection = self.groups.get_selection();
-                $(self.groups).trigger(
-                    'selected', [selection.ids, selection.records]);
-            });
-
-            // Add button
-            if (!this.$buttons) {
-                this.$buttons = $(QWeb.render("ListView.buttons", {'widget':self}));
-                if (this.options.$buttons) {
-                    this.$buttons.appendTo(this.options.$buttons);
-                } else {
-                    this.$el.find('.oe_list_buttons').replaceWith(this.$buttons);
-                }
-                this.options.$buttons.find(".toggle_select_field").click(function() {
-                    $(this).next().toggle();
-                });
-                this.options.$buttons.find(".sequence").change(function () {
+       load_list: function(data) {
+           this._super(data);
+           if (typeof(this.ok) == "undefined"){
+                this.ok = false;
+           }
+           if (this.$buttons && !this.ok) {
+               this.ok = true;
+               this.ViewManager.$el.find(".toggle_select_field").click(function() {
+                   $(this).next().toggle();
+               });
+               this.ViewManager.$el.find(".sequence").change(function () {
                     $(this).parents('.setting_field').next('input').attr({'sequence': $(this).val()});
-                });
-                this.options.$buttons.find(".string_field").change(function () {
+               });
+               this.ViewManager.$el.find(".string_field").change(function () {
                     $(this).parents('.setting_field').next('input').attr({'string_field': $(this).val()});
-                });
-                this.options.$buttons.find("i[setting]").click(function () {
+               });
+               this.ViewManager.$el.find("i[setting]").click(function () {
                     $(this).parent().find('.setting_field').toggle();
-                });
-                this.options.$buttons.find(".update_setting_field").click(function () {
-                    var parent = $(this).parents('.setting_field');
-                    parent.next().attr({string_field: parent.find('.string_field').val(), 'sequence': parent.find('.sequence').val()})
-                    parent.toggle();
-                });
-                this.setting_fields_show(this.options.$buttons);
-                this.update_show_fields(this.options.$buttons);
-                this.$buttons.find('.oe_list_add')
-                        .click(this.proxy('do_add_record'))
-                        .prop('disabled', this.grouped);
-            }
+               });
+               this.ViewManager.$el.find(".update_setting_field").click(function () {
+                   var parent = $(this).parents('.setting_field');
+                   parent.next().attr({string_field: parent.find('.string_field').val(), 'sequence': parent.find('.sequence').val()})
+                   parent.toggle();
+               });
+               this.setting_fields_show(this.options.$buttons);
+               this.update_show_fields(this.options.$buttons);
+           }
 
-            // Pager
-            if (!this.$pager) {
-                this.$pager = $(QWeb.render("ListView.pager", {'widget':self}));
-                if (this.options.$buttons) {
-                    this.$pager.appendTo(this.options.$pager);
-                } else {
-                    this.$el.find('.oe_list_pager').replaceWith(this.$pager);
-                }
-
-                this.$pager
-                    .on('click', 'a[data-pager-action]', function () {
-                        var $this = $(this);
-                        var max_page_index = Math.ceil(self.dataset.size() / self.limit()) - 1;
-                        switch ($this.data('pager-action')) {
-                            case 'first':
-                                self.page = 0;
-                                break;
-                            case 'last':
-                                self.page = max_page_index;
-                                break;
-                            case 'next':
-                                self.page += 1;
-                                break;
-                            case 'previous':
-                                self.page -= 1;
-                                break;
-                        }
-                        if (self.page < 0) {
-                            self.page = max_page_index;
-                        } else if (self.page > max_page_index) {
-                            self.page = 0;
-                        }
-                        self.reload_content();
-                    }).find('.oe_list_pager_state')
-                        .click(function (e) {
-                            e.stopPropagation();
-                            var $this = $(this);
-
-                            var $select = $('<select>')
-                                .appendTo($this.empty())
-                                .click(function (e) {e.stopPropagation();})
-                                .append('<option value="80">80</option>' +
-                                        '<option value="200">200</option>' +
-                                        '<option value="500">500</option>' +
-                                        '<option value="2000">2000</option>' +
-                                        '<option value="NaN">' + _t("Unlimited") + '</option>')
-                                .change(function () {
-                                    var val = parseInt($select.val(), 10);
-                                    self._limit = (isNaN(val) ? null : val);
-                                    self.page = 0;
-                                    self.reload_content();
-                                }).blur(function() {
-                                    $(this).trigger('change');
-                                })
-                                .val(self._limit || 'NaN');
-                        });
-            }
-
-            // Sidebar
-            if (!this.sidebar && this.options.$sidebar) {
-                this.sidebar = new instance.web.Sidebar(this);
-                this.sidebar.appendTo(this.options.$sidebar);
-                this.sidebar.add_items('other', _.compact([
-                    { label: _t("Export"), callback: this.on_sidebar_export },
-                    self.is_action_enabled('delete') && { label: _t('Delete'), callback: this.do_delete_selected }
-                ]));
-                this.sidebar.add_toolbar(this.fields_view.toolbar);
-                this.sidebar.$el.hide();
-            }
-            //Sort
-            var default_order = this.fields_view.arch.attrs.default_order,
-                unsorted = !this.dataset._sort.length;
-            if (unsorted && default_order && !this.grouped) {
-                this.dataset.set_sort(default_order.split(','));
-            }
-
-            if(this.dataset._sort.length){
-                if(this.dataset._sort[0].indexOf('-') == -1){
-                    this.$el.find('th[data-id=' + this.dataset._sort[0] + ']').addClass("sortdown");
-                }else {
-                    this.$el.find('th[data-id=' + this.dataset._sort[0].split('-')[1] + ']').addClass("sortup");
-                }
-            }
-            this.trigger('list_view_loaded', data, this.grouped);
-        },
+       },
         update_show_fields: function (node) {
             var self = this;
-            node.find('a[action="update"]').click(function () {
-                var fields = []
-                var sequence = {}
-                var fields_string = {}
-                self.$buttons.find('.choose_field_show').find('.suggestion input:checked').each(function () {
-                    fields.push($(this).val());
-                    var _seq = $(this).attr('sequence') || false;
-                    if (_seq){
-                        sequence[$(this).attr('id')] = parseInt(_seq);
-                    }
-                    var _str = $(this).attr('string_field') || false;
-                    if (_str){
-                        fields_string[$(this).attr('id')] = _str;
-                    }
-                });
-                new instance.web.Model('show.fields').call('action', [{'model_name': self.model, 'fields_show': fields,
-                'user_id': self.session.uid, 'fields_sequence': JSON.stringify(sequence),
-                'fields_string': JSON.stringify(fields_string)}, 'update']).then(function (result) {
-                    location.reload();
-                });
-            });
-        },
-        setting_fields_show: function (node) {
-            var self = this;
-            node.find(".fields_setting").click(function () {
-                var $form_show = $(QWeb.render('FormShowField', self.data_show_field));
-//  set data for form
-                $form_show.find('input[name="color"][value="'+(self.data_show_field.color || 'check-primary')+'"]').attr('checked', true);
-                if (self.data_show_field.all_user){
-                    $form_show.find('#all_user').attr('checked', true);
-                }
-                if (self.data_show_field.color_for_list){
-                    $form_show.find('#color_for_list').attr('checked', true);
-                }
-//                insert to body
-                $form_show.insertAfter('body');
-
-//                events
-                $('.close-field-show').click(function () {
-                    $form_show.remove();
-                });
-                $form_show.find('a[action="update"]').click(function () {
-                    var data = {color: $form_show.find('input[name="color"]:checked').val(),
-                                all_user: false, color_for_list: false, model_name: self.model,
-                                user_id: self.session.uid}
-                    if ($form_show.find('#all_user').is(':checked')){
-                        data.all_user = true;
-                    }
-                    if ($form_show.find('#color_for_list').is(':checked')){
-                        data.color_for_list = true;
-                    }
-                    new instance.web.Model('show.fields').call('action', [data, 'update']).then(function (result) {
+            if (typeof(node) != 'undefined'){
+                node.find('a[action="update"]').click(function () {
+                    var fields = []
+                    var sequence = {}
+                    var fields_string = {}
+                    self.$buttons.find('.choose_field_show').find('.suggestion input:checked').each(function () {
+                        fields.push($(this).val());
+                        var _seq = $(this).attr('sequence') || false;
+                        if (_seq){
+                            sequence[$(this).attr('id')] = parseInt(_seq);
+                        }
+                        var _str = $(this).attr('string_field') || false;
+                        if (_str){
+                            fields_string[$(this).attr('id')] = _str;
+                        }
+                    });
+                    new instance.web.Model('show.fields').call('action', [{'model_name': self.model, 'fields_show': fields,
+                    'user_id': self.session.uid, 'fields_sequence': JSON.stringify(sequence),
+                    'fields_string': JSON.stringify(fields_string)}, 'update']).then(function (result) {
                         location.reload();
                     });
                 });
-            });
+            }
+        },
+        setting_fields_show: function (node) {
+            var self = this;
+            if (typeof(node) != 'undefined'){
+                node.find(".fields_setting").click(function () {
+                    var $form_show = $(QWeb.render('FormShowField', self.data_show_field));
+    //  set data for form
+                    $form_show.find('input[name="color"][value="'+(self.data_show_field.color || 'check-primary')+'"]').attr('checked', true);
+                    if (self.data_show_field.all_user){
+                        $form_show.find('#all_user').attr('checked', true);
+                    }
+                    if (self.data_show_field.color_for_list){
+                        $form_show.find('#color_for_list').attr('checked', true);
+                    }
+    //                insert to body
+                    $form_show.insertAfter('body');
+
+    //                events
+                    $('.close-field-show').click(function () {
+                        $form_show.remove();
+                    });
+                    $form_show.find('a[action="update"]').click(function () {
+                        var data = {color: $form_show.find('input[name="color"]:checked').val(),
+                                    all_user: false, color_for_list: false, model_name: self.model,
+                                    user_id: self.session.uid}
+                        if ($form_show.find('#all_user').is(':checked')){
+                            data.all_user = true;
+                        }
+                        if ($form_show.find('#color_for_list').is(':checked')){
+                            data.color_for_list = true;
+                        }
+                        new instance.web.Model('show.fields').call('action', [data, 'update']).then(function (result) {
+                            location.reload();
+                        });
+                    });
+                });
+            }
         }
     });
 };
